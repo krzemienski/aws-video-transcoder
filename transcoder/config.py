@@ -20,7 +20,7 @@ class Configuration(object):
         'queue_name': 'autotranscode',
         'pipeline_name': 'autotranscode-pipe',
         'poll_interval': 10,
-        'region_name': 'us-west-2',
+        'region_name': 'eu-west-1',
         'file_pattern': '*.mov'
     }
 
