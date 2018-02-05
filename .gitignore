@@ -1,3 +1,5 @@
 __pycache__
 .vscode/
 lego.mp4
+dist/
+aws_video_transcoder.egg-info/
