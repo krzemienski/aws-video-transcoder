@@ -4,24 +4,24 @@ import os
 import sys
 import json
 
-from transcoder import Transcoder
+from .transcoder import Transcoder
 
 class Configuration(object):
     """Create a configuration file which saves the information required
     for transcoding movies on aws"""
     
     empty_config_data = {
-        'unconverted_directory': "<PLEASE PROVIDE A LOCAL DIRECTORY FOR INPUT FILES>",
-        'converted_directory': "<PLEASE PROVIDE A LOCAL DIRECTORY FOR OUTPUT FILES>",
-        'in_bucket_name': "<PLEASE PROVIDE AN INPUT BUCKET NAME>",
-        'out_bucket_name': "<PLEASE PROVIDE AN OUTPUT BUCKET NAME>",
+        'unconverted_dir': "<PLEASE PROVIDE A LOCAL DIRECTORY FOR INPUT FILES>",
+        'converted_dir': "<PLEASE PROVIDE A LOCAL DIRECTORY FOR OUTPUT FILES>",
+        'in_bucket': "<PLEASE PROVIDE AN INPUT BUCKET NAME>",
+        'out_bucket': "<PLEASE PROVIDE AN OUTPUT BUCKET NAME>",
         'role_name': 'autotranscode-user',
         'topic_name': 'autotranscode-complete',
         'queue_name': 'autotranscode',
         'pipeline_name': 'autotranscode-pipe',
         'poll_interval': 10,
         'region_name': 'eu-west-1',
-        'file_pattern': '*.mov'
+        'file_pattern': '*.mp4'
     }
 
     def __init__(self):
@@ -37,15 +37,15 @@ class Configuration(object):
                 json.dump(cls.empty_config_data, config, indent=4)
             sys.exit(1)
 
-        print('config already exists: ~/aws-transcode.json')
+        print('config already exists: ~/.aws-transcode.json')
 
         
     @classmethod
     def load_from_config(cls, config_filepath):
         """Load a new transcoder from a JSON config file."""
         with open(config_filepath, 'r') as config:
-            config_data = json.load(config)
-            return Transcoder(**config_data)
+            cfg = json.load(config)
+            return Transcoder(**cfg)
 
 def main():
     """Main entry of the script"""

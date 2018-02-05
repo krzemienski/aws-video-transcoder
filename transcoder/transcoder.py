@@ -15,11 +15,10 @@ import boto3
 
 from botocore.client import ClientError
 
-from roles import BASIC_ROLE, QUEUE_POLICY, S3_POLICY
+from .roles import BASIC_ROLE, QUEUE_POLICY, S3_POLICY
 
 class TranscodeError(Exception):
     pass
-
 
 class Transcoder(object):
     """
@@ -29,25 +28,23 @@ class Transcoder(object):
     the output from S3 back to your computer.
     """
 
-    def __init__(self, unconverted_directory, converted_directory,
-                 in_bucket_name, out_bucket_name,
-                 poll_interval=10, file_pattern='*.mov'):
+    def __init__(self, **config):
         super(Transcoder, self).__init__()
 
         # Local (filesystem) related.
-        self.unconverted_directory = unconverted_directory
-        self.converted_directory = converted_directory
+        self.unconverted_directory = config['unconverted_dir']
+        self.converted_directory = config['converted_dir']
         self.existing_files = set()
-        self.file_pattern = file_pattern
+        self.file_pattern = config['file_pattern']
 
         # AWS related.
-        self.in_bucket_name = in_bucket_name
-        self.out_bucket_name = out_bucket_name
-        self.role_name = 'autotranscode-user'
-        self.topic_name = 'autotranscode-complete'
-        self.queue_name = 'autotranscode'
-        self.pipeline_name = 'autotranscode-pipe'
-        self.region_name = 'eu-west-1'
+        self.in_bucket_name = config['in_bucket']
+        self.out_bucket_name = config['out_bucket']
+        self.role_name = config['role_name']
+        self.topic_name = config['topic_name']
+        self.queue_name = config['queue_name']
+        self.pipeline_name = config['pipeline_name']
+        self.region_name = config['region_name']
         self.role_arn = None
         self.topic_arn = None
         self.queue_arn = None
@@ -59,7 +56,7 @@ class Transcoder(object):
         self.queue = None
 
         # How often should we look at the local FS for updates?
-        self.poll_interval = int(poll_interval)
+        self.poll_interval = int(config['poll_interval'])
 
         self.s3 = boto3.resource('s3')
         self.iam = boto3.resource('iam')
@@ -79,11 +76,6 @@ class Transcoder(object):
 
         if not os.path.exists(self.unconverted_directory):
             os.makedirs(self.unconverted_directory)
-        else:
-            # If it's there, it may already have files in it, which may have
-            # already been processed. Keep these filenames & only process
-            # new ones.
-            self.existing_files = set(self.collect_files())
 
         if not os.path.exists(self.converted_directory):
             os.makedirs(self.converted_directory)
@@ -150,6 +142,13 @@ class Transcoder(object):
             self.start_transcode(filename)
             self.existing_files.add(filepath)
 
+    def make_public(self, s3_file):
+        """Make object in S3 bucket public for everyone"""
+        mp4 = self.s3.ObjectAcl(self.out_bucket_name, s3_file)
+        mp4.put(ACL='public-read')
+        webm = self.s3.ObjectAcl(self.out_bucket_name, s3_file.replace('mp4', 'webm'))
+        webm.put(ACL='public-read')
+
     def process_completed(self):
         """
         Check the queue and download any completed files from S3 to your
@@ -158,7 +157,7 @@ class Transcoder(object):
         to_fetch = self.check_queue()
 
         for s3_file in to_fetch:
-            self.download_from_s3(s3_file)
+            self.make_public(s3_file)
 
     # The boto-specific methods.
     def bucket_exists(self, bucket_name):
@@ -177,8 +176,7 @@ class Transcoder(object):
         Returns ``True`` if an IAM role exists.
         """
         try:
-            self.iam.meta.client.get_role(
-                RoleName=self.role_name)
+            self.iam.meta.client.get_role(RoleName=self.role_name)
             return True
         except ClientError:
             return None
@@ -234,8 +232,7 @@ class Transcoder(object):
         if 'Statement' not in policy:
             statement = QUEUE_POLICY
             statement['Resource'] = self.queue_arn
-            statement['Condition']['StringLike']['aws:SourceArn'] = \
-                self.topic_arn
+            statement['Condition']['StringLike']['aws:SourceArn'] = self.topic_arn
             policy['Statement'] = [statement]
 
             queue.set_attributes(Attributes={
@@ -276,7 +273,7 @@ class Transcoder(object):
         """
         filename = os.path.basename(filepath)
         with open(filepath, 'rb') as data:
-            self.in_bucket.Object(filename).put(Body=data)
+            self.in_bucket.Object(filename).put(Body=data)        
         print("Uploaded raw video {0}".format(filename))
         return filename
 
@@ -297,7 +294,10 @@ class Transcoder(object):
             },
             Outputs=[{
                 'Key': '.'.join(filename.split('.')[:-1]) + '.mp4',
-                'PresetId': '1351620000001-100070'
+                'PresetId': '1351620000001-000010'
+            },{
+                'Key': '.'.join(filename.split('.')[:-1]) + '.webm',
+                'PresetId': '1351620000001-100240'
             }]
         )
         print("Started transcoding {0}".format(filename))
@@ -312,6 +312,9 @@ class Transcoder(object):
 
         for msg in queue.receive_messages(WaitTimeSeconds=self.poll_interval):
             body = json.loads(msg.body)
+            if body['Subject'] == 'test':
+                break
+
             message = body.get('Message', '{}')
             outputs = json.loads(message).get('outputs', [])
 
@@ -362,14 +365,13 @@ class Transcoder(object):
         self.ensure_aws_setup()
 
         # Run forever, or until the user says stop.
-        while True:
-            print("Checking for new files.")
-            files_found = self.check_unconverted()
+        print("Checking for new files.")
+        files_found = self.check_unconverted()
 
-            if files_found:
-                print("Found {0} new file(s).".format(len(files_found)))
-                self.start_converting(files_found)
+        if files_found:
+            print("Found {0} new file(s).".format(len(files_found)))
+            self.start_converting(files_found)
 
-            # Here we check the queue, which will long-poll
-            # for up to ``self.poll_interval`` seconds.
-            self.process_completed()
+        # Here we check the queue, which will long-poll
+        # for up to ``self.poll_interval`` seconds.
+        self.process_completed()

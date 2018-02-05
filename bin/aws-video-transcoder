@@ -1,0 +1,4 @@
+#!/usr/bin/env python
+
+from transcoder import runner
+runner.main()
