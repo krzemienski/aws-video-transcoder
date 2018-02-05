@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='aws-video-transcoder',
-      version='0.1',
+      version='0.2',
       description='Transcodes videos to web-proof formats such as webp.',
       url='https://github.com/zwennesm/aws-video-transcoder',
       author='Martijn Zwennes',
