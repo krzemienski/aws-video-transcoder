@@ -39,5 +39,8 @@ The following resources will be created:
 Once the resource are created the application will start searching the input folder for files which can be sent to S3 for transcoding. Once the transcoding is completed the output will be written to the
 output S3 bucket and the user will be informed via the SQS message queue.
 
+## Authentication
+Your local `aws-cli` settings are used (default profile) so make sure that the default account (you can change this with export AWS_PROFILE=<ACCOUNT>) has clearance to create the resources named above.
+
 ## Regarding presets
 Currently the presets are hard-coded into the application. System defined presets are used in order to make the application usable for others as well. 

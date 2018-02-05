@@ -146,8 +146,6 @@ class Transcoder(object):
         """Make object in S3 bucket public for everyone"""
         mp4 = self.s3.ObjectAcl(self.out_bucket_name, s3_file)
         mp4.put(ACL='public-read')
-        webm = self.s3.ObjectAcl(self.out_bucket_name, s3_file.replace('mp4', 'webm'))
-        webm.put(ACL='public-read')
 
     def process_completed(self):
         """
@@ -275,6 +273,7 @@ class Transcoder(object):
         with open(filepath, 'rb') as data:
             self.in_bucket.Object(filename).put(Body=data)        
         print("Uploaded raw video {0}".format(filename))
+        self.delete_completed_files(filename)
         return filename
 
     def start_transcode(self, filename):
@@ -353,6 +352,10 @@ class Transcoder(object):
 
     # End boto-specific methods.
 
+    def delete_completed_files(self, filepath):
+        """Deletes files which are completed with the transcoding process"""
+        # os.remove(self.unconverted_directory + "/" + filepath)
+
     def run(self):
         """
         Start the main loop. This repeatedly checks for new files,
@@ -364,14 +367,15 @@ class Transcoder(object):
         self.ensure_local_setup()
         self.ensure_aws_setup()
 
-        # Run forever, or until the user says stop.
-        print("Checking for new files.")
-        files_found = self.check_unconverted()
+        while True:
+            # Run forever, or until the user says stop.
+            print("Checking for new files.")
+            files_found = self.check_unconverted()
 
-        if files_found:
-            print("Found {0} new file(s).".format(len(files_found)))
-            self.start_converting(files_found)
+            if files_found:
+                print("Found {0} new file(s).".format(len(files_found)))
+                self.start_converting(files_found)
 
-        # Here we check the queue, which will long-poll
-        # for up to ``self.poll_interval`` seconds.
-        self.process_completed()
+            # Here we check the queue, which will long-poll
+            # for up to ``self.poll_interval`` seconds.
+            self.process_completed()
