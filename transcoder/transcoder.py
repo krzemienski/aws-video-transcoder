@@ -142,11 +142,6 @@ class Transcoder(object):
             self.start_transcode(filename)
             self.existing_files.add(filepath)
 
-    def make_public(self, s3_file):
-        """Make object in S3 bucket public for everyone"""
-        mp4 = self.s3.ObjectAcl(self.out_bucket_name, s3_file)
-        mp4.put(ACL='public-read')
-
     def process_completed(self):
         """
         Check the queue and download any completed files from S3 to your
@@ -155,7 +150,7 @@ class Transcoder(object):
         to_fetch = self.check_queue()
 
         for s3_file in to_fetch:
-            self.make_public(s3_file)
+            self.show_s3_link(s3_file)
 
     # The boto-specific methods.
     def bucket_exists(self, bucket_name):
@@ -291,6 +286,7 @@ class Transcoder(object):
                 'Interlaced': 'auto',
                 'Container': 'auto'
             },
+            #todo: make this configurable in json
             Outputs=[{
                 'Key': '.'.join(filename.split('.')[:-1]) + '.mp4',
                 'PresetId': '1351620000001-000010'
@@ -354,7 +350,16 @@ class Transcoder(object):
 
     def delete_completed_files(self, filepath):
         """Deletes files which are completed with the transcoding process"""
-        # os.remove(self.unconverted_directory + "/" + filepath)
+        os.remove(self.unconverted_directory + "/" + filepath)
+
+    def show_s3_link(self, filename):
+        """Print cloudfront link in console"""
+        #todo: this should print a url for each file format
+        print("URL to new video: https://s3-{region}.amazonaws.com/{out_bucket}/{filename}".format(
+            region=self.region_name,
+            out_bucket=self.out_bucket_name,
+            filename=filename
+        ))
 
     def run(self):
         """
@@ -368,14 +373,19 @@ class Transcoder(object):
         self.ensure_aws_setup()
 
         while True:
-            # Run forever, or until the user says stop.
-            print("Checking for new files.")
-            files_found = self.check_unconverted()
+            try:
+                # Run forever, or until the user says stop.
+                print("Checking for new files.")
+                files_found = self.check_unconverted()
 
-            if files_found:
-                print("Found {0} new file(s).".format(len(files_found)))
-                self.start_converting(files_found)
+                if files_found:
+                    print("Found {0} new file(s).".format(len(files_found)))
+                    self.start_converting(files_found)
 
-            # Here we check the queue, which will long-poll
-            # for up to ``self.poll_interval`` seconds.
-            self.process_completed()
+                # Here we check the queue, which will long-poll
+                # for up to ``self.poll_interval`` seconds.
+                self.process_completed()
+
+            except KeyboardInterrupt:
+                print('\nStopping application.')
+                break
